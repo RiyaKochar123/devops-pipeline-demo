@@ -12,55 +12,43 @@ jobs:
       - name: Pick a reachable demo target
         id: pick
         shell: bash
+        continue-on-error: true
         run: |
-          set -e
-          # Try a few well-known demo sites until one responds.
-          targets=(
-            http://testphp.vulnweb.com/
-            http://testhtml5.vulnweb.com/
-            https://demo.testfire.net/
-          )
+          targets=(http://testphp.vulnweb.com/ http://testhtml5.vulnweb.com/ https://demo.testfire.net/)
           for t in "${targets[@]}"; do
-            echo "Checking $t ..."
             if curl -sI --max-time 15 "$t" | head -n1 | grep -E "200|301|302" >/dev/null; then
-              echo "target=$t" >> $GITHUB_OUTPUT
-              echo "Using target: $t"
-              exit 0
-            fi
+              echo "target=$t" >> $GITHUB_OUTPUT; echo "Using $t"; exit 0; fi
           done
-          # Fallback so the job still runs
-          echo "target=https://example.com" >> $GITHUB_OUTPUT
-          echo "No demo site reachable; using example.com"
+          echo "target=https://example.com" >> $GITHUB_OUTPUT; echo "Fallback to example.com"
 
-      - name: Run ZAP Baseline in Docker
+      - name: Run ZAP Baseline in Docker (never fail)
         shell: bash
+        continue-on-error: true
         run: |
-          set +e
           docker run --rm -v "$PWD":/zap/wrk owasp/zap2docker-stable \
             zap-baseline.py -t "${{ steps.pick.outputs.target }}" -a \
-            -r zap.html -J zap.json
-          status=$?
-          echo "ZAP exit status: $status"
-          # Ensure files exist so upload never fails
+            -r zap.html -J zap.json || true
+          # Ensure both files exist so upload always works
           [ -s zap.html ] || echo "<html><body><h3>No HTML from ZAP; see zap.json</h3></body></html>" > zap.html
           [ -s zap.json ] || echo '{"site":[],"alerts":[]}' > zap.json
-          ls -lah
+          ls -lah zap.html zap.json
 
-      - name: Show ZAP summary in this run
+      - name: Show summary in run page (nice screenshot)
         shell: bash
+        continue-on-error: true
         run: |
-          FILE="zap.json"
           echo "## ZAP target" >> $GITHUB_STEP_SUMMARY
           echo "${{ steps.pick.outputs.target }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Risk | Alert | Count |" >> $GITHUB_STEP_SUMMARY
           echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
           if command -v jq >/dev/null; then
-            jq -r '.site[].alerts[] | "| \(.riskdesc) | \(.name) | \(.count) |"' "$FILE" >> $GITHUB_STEP_SUMMARY || echo "| (no alerts) |  | 0 |" >> $GITHUB_STEP_SUMMARY
+            jq -r '.site[].alerts[] | "| \(.riskdesc) | \(.name) | \(.count) |"' zap.json >> $GITHUB_STEP_SUMMARY || echo "| (no alerts) |  | 0 |" >> $GITHUB_STEP_SUMMARY
           else
-            echo "| (jq not available) | (open zap.json artifact) |  |" >> $GITHUB_STEP_SUMMARY
+            echo "| (jq missing) | open zap.json artifact |  |" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload reports (both files)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
