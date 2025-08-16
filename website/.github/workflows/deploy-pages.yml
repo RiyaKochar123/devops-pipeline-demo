@@ -1,8 +1,8 @@
 name: deploy-pages
 on:
   push:
-    branches: [ main ]   # deploy on every push to main
-  workflow_dispatch:      # allow manual runs too
+    branches: [ main ]      # auto-deploy on push to main
+  workflow_dispatch:         # allow manual "Run workflow"
 
 permissions:
   contents: read
@@ -18,11 +18,25 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      # copy our tiny site to a dist folder
-      - name: Build site
+
+      # Create a small site to deploy:
+      - name: Prepare site
         run: |
           mkdir -p dist
-          cp -r website/* dist/
+          if [ -d website ]; then
+            cp -r website/* dist/
+          elif [ -f index.html ]; then
+            cp index.html dist/
+          else
+            cat > dist/index.html <<'HTML'
+            <!doctype html>
+            <meta charset="utf-8">
+            <title>CI/CD Demo</title>
+            <h1>It works! 🚀</h1>
+            <p>Deployed automatically by GitHub Actions on push to <code>main</code>.</p>
+            HTML
+          fi
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
