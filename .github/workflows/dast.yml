@@ -1,17 +1,26 @@
 name: dast
 on:
-  workflow_dispatch:  # lets you click 'Run workflow' manually in Actions
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  # (no issues permission needed because we won't write issues)
 
 jobs:
-  zap-baseline:
+  zap:
     runs-on: ubuntu-latest
     steps:
-      - name: ZAP Baseline scan (demo target)
+      - name: ZAP Baseline scan (public test site)
         uses: zaproxy/action-baseline@v0.12.0
         with:
-          target: https://example.com
-      - name: Upload report
+          target: https://testphp.vulnweb.com   # reliable demo target
+          allow_issue_writing: false            # <-- stop trying to create GitHub Issues
+          fail_action: false                    # <-- don't fail the workflow
+          cmd_options: "-a"                     # safe active/passive rules
+      - name: Upload reports
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
-          path: report_html.html
+          path: |
+            report_html.html
+            report_json.json
