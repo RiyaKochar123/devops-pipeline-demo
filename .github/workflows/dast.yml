@@ -16,16 +16,13 @@ jobs:
             owasp/zap2docker-stable \
             zap-baseline.py -t https://testphp.vulnweb.com -a \
             -r zap.html -J zap.json || true
+          echo "Files after scan:" && ls -lah
 
-          echo "List files + sizes:"
-          ls -lah
-          [ -s zap.html ] || echo "<html><body><h3>No HTML from ZAP; see zap.json</h3></body></html>" > zap.html
-
-      - name: Upload reports (always)
-        if: always()
+      - name: Upload reports (zip will contain BOTH files)
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
           path: |
             zap.html
             zap.json
+          if-no-files-found: error
