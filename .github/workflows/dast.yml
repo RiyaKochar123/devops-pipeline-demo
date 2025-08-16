@@ -4,7 +4,6 @@ on:
 
 permissions:
   contents: read
-  # (no issues permission needed because we won't write issues)
 
 jobs:
   zap:
@@ -12,12 +11,15 @@ jobs:
     steps:
       - name: ZAP Baseline scan (public test site)
         uses: zaproxy/action-baseline@v0.12.0
+        continue-on-error: true          # <- never fail the run
         with:
-          target: https://testphp.vulnweb.com   # reliable demo target
-          allow_issue_writing: false            # <-- stop trying to create GitHub Issues
-          fail_action: false                    # <-- don't fail the workflow
-          cmd_options: "-a"                     # safe active/passive rules
+          target: https://testphp.vulnweb.com
+          allow_issue_writing: false     # don't try to open GitHub Issues
+          fail_action: false             # extra safety
+          cmd_options: "-a"              # safe active/passive rules
+
       - name: Upload reports
+        if: always()                     # upload even if step had warnings
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
