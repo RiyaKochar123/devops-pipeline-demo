@@ -9,22 +9,56 @@ jobs:
   zap:
     runs-on: ubuntu-latest
     steps:
-      - name: Run ZAP Baseline in Docker (writes real reports)
+      - name: Pick a reachable demo target
+        id: pick
+        shell: bash
         run: |
-          # Run ZAP baseline inside the official Docker image.
-          # The "|| true" means: don't fail the job if ZAP returns non-zero.
-          docker run --rm \
-            -v ${{ github.workspace }}:/zap/wrk \
-            owasp/zap2docker-stable \
-            zap-baseline.py -t https://testphp.vulnweb.com -a \
-            -r zap.html -J zap.json || true
+          set -e
+          # Try a few well-known demo sites until one responds.
+          targets=(
+            http://testphp.vulnweb.com/
+            http://testhtml5.vulnweb.com/
+            https://demo.testfire.net/
+          )
+          for t in "${targets[@]}"; do
+            echo "Checking $t ..."
+            if curl -sI --max-time 15 "$t" | head -n1 | grep -E "200|301|302" >/dev/null; then
+              echo "target=$t" >> $GITHUB_OUTPUT
+              echo "Using target: $t"
+              exit 0
+            fi
+          done
+          # Fallback so the job still runs
+          echo "target=https://example.com" >> $GITHUB_OUTPUT
+          echo "No demo site reachable; using example.com"
 
-          echo "Files after scan:"
-          ls -lah
-
-          # Ensure BOTH files exist and are non-empty so the artifact step succeeds.
+      - name: Run ZAP Baseline in Docker
+        shell: bash
+        run: |
+          set +e
+          docker run --rm -v "$PWD":/zap/wrk owasp/zap2docker-stable \
+            zap-baseline.py -t "${{ steps.pick.outputs.target }}" -a \
+            -r zap.html -J zap.json
+          status=$?
+          echo "ZAP exit status: $status"
+          # Ensure files exist so upload never fails
           [ -s zap.html ] || echo "<html><body><h3>No HTML from ZAP; see zap.json</h3></body></html>" > zap.html
           [ -s zap.json ] || echo '{"site":[],"alerts":[]}' > zap.json
+          ls -lah
+
+      - name: Show ZAP summary in this run
+        shell: bash
+        run: |
+          FILE="zap.json"
+          echo "## ZAP target" >> $GITHUB_STEP_SUMMARY
+          echo "${{ steps.pick.outputs.target }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Risk | Alert | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|---|---|---|" >> $GITHUB_STEP_SUMMARY
+          if command -v jq >/dev/null; then
+            jq -r '.site[].alerts[] | "| \(.riskdesc) | \(.name) | \(.count) |"' "$FILE" >> $GITHUB_STEP_SUMMARY || echo "| (no alerts) |  | 0 |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "| (jq not available) | (open zap.json artifact) |  |" >> $GITHUB_STEP_SUMMARY
 
       - name: Upload reports (both files)
         uses: actions/upload-artifact@v4
