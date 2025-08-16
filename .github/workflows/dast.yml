@@ -11,18 +11,30 @@ jobs:
     steps:
       - name: ZAP Baseline scan (public test site)
         uses: zaproxy/action-baseline@v0.12.0
-        continue-on-error: true          # <- never fail the run
+        continue-on-error: true
         with:
           target: https://testphp.vulnweb.com
-          allow_issue_writing: false     # don't try to open GitHub Issues
-          fail_action: false             # extra safety
-          cmd_options: "-a"              # safe active/passive rules
+          allow_issue_writing: false
+          fail_action: false
+          # -a : safe active checks
+          # -J : also write JSON (report_json.json)
+          # -r : write HTML to this filename
+          cmd_options: "-a -J -r zap-baseline.html"
 
-      - name: Upload reports
-        if: always()                     # upload even if step had warnings
+      - name: List files and sizes (debug)
+        if: always()
+        run: |
+          echo "Workspace contents:"
+          ls -lah
+          echo "Sizes:"
+          [ -f zap-baseline.html ] && wc -c zap-baseline.html || echo "zap-baseline.html MISSING"
+          [ -f report_json.json ] && wc -c report_json.json || echo "report_json.json MISSING"
+
+      - name: Upload reports (always)
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: zap-report
           path: |
-            report_html.html
+            zap-baseline.html
             report_json.json
